@@ -14,9 +14,11 @@ git branch -a
 
 syntax: git fetch url-to-repo branchname:refs/remotes/origin/branchname
 
-git fetch git://github.com/priv-kweihmann/meta-sca warrior:refs/remotes/origin/warrior
+# I think like this we get the latest and greatest upstream master:
 
-6) Update from git.yoctoproject:
+git fetch git://github.com/priv-kweihmann/meta-sca master:refs/remotes/official-upstream/master
+
+4) Update from upstream
 git co master
 >> git remote -v
 
