@@ -32,6 +32,7 @@ def do_sca_conv_eslint(d):
 
     __excludes = sca_filter_files(d, d.getVar("SCA_SOURCES_DIR"), clean_split(d, "SCA_FILE_FILTER_EXTRA"))
     __suppress = get_suppress_entries(d)
+    _findings = []
 
     if os.path.exists(d.getVar("SCA_RAW_RESULT_FILE")):
         try:
@@ -51,14 +52,17 @@ def do_sca_conv_eslint(d):
                                                 Message=f.attrib["message"],
                                                 ID=f.attrib["source"],
                                                 Severity=f.attrib["severity"])
-                        if g.GetPlainID() in __suppress:
+                        if g.GetFormattedID() in __suppress:
+                            continue
+                        if not sca_is_in_finding_scope(d, "eslint", g.GetFormattedID()):
                             continue
                         if g.Severity in sca_allowed_warning_level(d):
-                            sca_add_model_class(d, g)
+                            _findings.append(g)
                 except Exception as exp:
                     bb.warn(str(exp))
         except Exception as e:
             bb.note(str(e))
+    sca_add_model_class_list(d, _findings)
     return sca_save_model_to_string(d)
 
 python do_sca_eslint_core() {
@@ -71,25 +75,31 @@ python do_sca_eslint_core() {
     d.setVar("SCA_SUPRESS_FILE", os.path.join(d.getVar("STAGING_DATADIR_NATIVE"), "eslint-{}-suppress".format(d.getVar("SCA_MODE"))))
     d.setVar("SCA_FATAL_FILE", os.path.join(d.getVar("STAGING_DATADIR_NATIVE"), "eslint-{}-fatal".format(d.getVar("SCA_MODE"))))
 
-    os.symlink(os.path.join(d.getVar("STAGING_LIBDIR_NATIVE"), "node_modules"), "node_modules", target_is_directory=True)
+    if not os.path.exists("node_modules"):
+        os.symlink(os.path.join(d.getVar("STAGING_LIBDIR_NATIVE"), "node_modules"), "node_modules", target_is_directory=True)
 
     _args = ["eslint"]
     _args += ["-c", os.path.join(d.getVar("STAGING_DATADIR_NATIVE"), "eslint", "configs", d.getVar("SCA_ESLINT_CONFIG_FILE"))]
     _args += ["-f", "checkstyle"]
     _args += ["--quiet"]
-    _args += [d.getVar("SCA_SOURCES_DIR") + "/"]
+    _files = get_files_by_extention(d, d.getVar("SCA_SOURCES_DIR"), "",
+                                sca_filter_files(d, d.getVar("SCA_SOURCES_DIR"), clean_split(d, "SCA_FILE_FILTER_EXTRA")))
 
     cmd_output = ""
-    try:
-        cmd_output = subprocess.check_output(_args, universal_newlines=True)
-    except subprocess.CalledProcessError as e:
-        cmd_output = e.stdout or ""
+    if any(_files):
+        try:
+            cmd_output = subprocess.check_output(_args + _files, universal_newlines=True)
+        except subprocess.CalledProcessError as e:
+            cmd_output = e.stdout or ""
     result_raw_file = os.path.join(d.getVar("T"), "sca_raw_eslint.xml")
     d.setVar("SCA_RAW_RESULT_FILE", result_raw_file)
     with open(result_raw_file, "w") as o:
         o.write(cmd_output)
 
-    os.remove("node_modules")
+    try:
+        os.remove("node_modules")
+    except FileNotFoundError:
+        pass
     
     ## Create data model
     d.setVar("SCA_DATAMODEL_STORAGE", "{}/eslint.dm".format(d.getVar("T")))

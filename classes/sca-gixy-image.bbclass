@@ -28,7 +28,8 @@ def do_sca_conv_gixy(d, cmd_output=""):
         "ERROR" : "error",
     }
 
-    __suppress = get_suppress_entries(d)
+    _suppress = get_suppress_entries(d)
+    _findings = []
 
     ## Result file parsing
     if os.path.exists(d.getVar("SCA_RAW_RESULT_FILE")):
@@ -47,10 +48,12 @@ def do_sca_conv_gixy(d, cmd_output=""):
                                         Message="{} {}".format(item["summary"], item["reason"]),
                                         ID=item["plugin"].replace(" ", "_"),
                                         Severity=severity_map[str(item["severity"])])
-                if g.GetPlainID() in __suppress:
+                if g.GetFormattedID() in _suppress:
+                    continue
+                if not sca_is_in_finding_scope(d, "gixy", g.GetFormattedID()):
                     continue
                 if g.Severity in sca_allowed_warning_level(d):
-                    sca_add_model_class(d, g)
+                    _findings.append(g)
             except Exception as e:
                 bb.note(str(e))
 
@@ -70,11 +73,14 @@ def do_sca_conv_gixy(d, cmd_output=""):
                                     Severity=severity_map[m.group("severity")])
             if g.GetPlainID() in __suppress:
                 continue
+            if not sca_is_in_finding_scope(d, "gixy", g.GetFormattedID()):
+                continue
             if g.Severity in sca_allowed_warning_level(d):
-                sca_add_model_class(d, g)
+                _findings.append(g)
         except Exception as e:
             bb.note(str(e))
 
+    sca_add_model_class_list(d, _findings)
     return sca_save_model_to_string(d)
 
 python do_sca_gixy() {

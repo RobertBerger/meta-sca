@@ -4,7 +4,7 @@ SRC_URI = "file://clang.sca.description \
            file://clang.sca.score"
 
 LICENSE = "BSD-2-Clause"
-LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/BSD-2-Clause;md5=8bef8e6712b1be5aa76af1ebde9d6378"
+LIC_FILES_CHKSUM = "file://${SCA_LAYERDIR}/LICENSE;md5=e926c89aceef6c1a4247d5df08f94533"
 
 inherit native
 
@@ -12,6 +12,8 @@ FILES_${PN} = "${datadir}"
 
 do_configure[noexec] = "1"
 do_compile[noexec] = "1"
+
+DEPENDS += "clang-native"
 
 do_install() {
     install -d ${D}${datadir}

@@ -22,6 +22,7 @@ def do_sca_conv_detectsecrets(d):
     items = []
     __excludes = sca_filter_files(d, d.getVar("SCA_SOURCES_DIR"), clean_split(d, "SCA_FILE_FILTER_EXTRA"))
     __suppress = get_suppress_entries(d)
+    _findings = []
 
     if os.path.exists(d.getVar("SCA_RAW_RESULT_FILE")):
         j = {}
@@ -45,13 +46,16 @@ def do_sca_conv_detectsecrets(d):
                                                 Message="{} found: {}".format(w["type"], w["hashed_secret"]),
                                                 ID=w["type"].replace(" ", ""),
                                                 Severity="warning")
-                        if g.GetPlainID() in __suppress:
+                        if g.GetFormattedID() in __suppress:
+                            continue
+                        if not sca_is_in_finding_scope(d, "detectsecrets", g.GetFormattedID()):
                             continue
                         if g.Severity in sca_allowed_warning_level(d):
-                            sca_add_model_class(d, g)
+                            _findings.append(g)
                     except Exception as exp:
                         bb.warn(str(exp))
 
+    sca_add_model_class_list(d, _findings)
     return sca_save_model_to_string(d)
 
 python do_sca_detectsecrets_core() {
@@ -69,13 +73,15 @@ python do_sca_detectsecrets_core() {
     _args += ["scan"]
     _args += ["--all-files"]
     _args += ["--use-all-plugins"]
-    _args += [d.getVar("SCA_SOURCES_DIR")]
+    _files = get_files_by_extention(d, d.getVar("SCA_SOURCES_DIR"), "",
+                                sca_filter_files(d, d.getVar("SCA_SOURCES_DIR"), clean_split(d, "SCA_FILE_FILTER_EXTRA")))
 
-    cmd_output = "" 
-    try:
-        cmd_output = subprocess.check_output(_args, universal_newlines=True, stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as e:
-        cmd_output = e.stdout or ""
+    cmd_output = ""
+    if any(_files):
+        try:
+            cmd_output = subprocess.check_output(_args + _files, universal_newlines=True, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            cmd_output = e.stdout or ""
 
     result_raw_file = os.path.join(d.getVar("T"), "sca_raw_detectsecrets.json")
     d.setVar("SCA_RAW_RESULT_FILE", result_raw_file)

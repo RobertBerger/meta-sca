@@ -49,6 +49,7 @@ def do_sca_conv_ropgadget(d):
     _excludes = sca_filter_files(d, d.getVar("SCA_SOURCES_DIR"), clean_split(d, "SCA_FILE_FILTER_EXTRA"))
 
     _findings = {}
+    _findingsres = []
     if os.path.exists(d.getVar("SCA_RAW_RESULT_FILE")):
         with open(d.getVar("SCA_RAW_RESULT_FILE"), "r") as f:
             for m in re.finditer(pattern, f.read(), re.MULTILINE):
@@ -64,11 +65,13 @@ def do_sca_conv_ropgadget(d):
                                             Severity="info")
                     if g.File in _excludes:
                         continue
+                    if not sca_is_in_finding_scope(d, "ropgadget", g.GetFormattedID()):
+                        continue
                     if not m.group("bin") in _findings.keys():
                         _findings[m.group("bin")] = 0
                     _findings[m.group("bin")] += 1
                     if g.Severity in sca_allowed_warning_level(d):
-                        sca_add_model_class(d, g)
+                        _findingsres.append(g)
                 except Exception as exp:
                     bb.warn(str(exp))
     
@@ -88,9 +91,12 @@ def do_sca_conv_ropgadget(d):
                                     Message="{} exceeded ROP exploit threshold ({}/{})".format(package_name, v, _threshold),
                                     ID="thresholdexceeded",
                                     Severity="warning")
+            if not sca_is_in_finding_scope(d, "ropgadget", g.GetFormattedID()):
+                continue
             if g.Severity in sca_allowed_warning_level(d):
-                sca_add_model_class(d, g)
+                _findingsres.append(g)
 
+    sca_add_model_class_list(d, _findingsres)
     return sca_save_model_to_string(d)
 
 python do_sca_ropgadget() {

@@ -12,6 +12,8 @@ SCA_FILE_FILTER ?= "\
                     **/testsuite/* \
 "
 
+
+
 ## Local file filter
 SCA_FILE_FILTER_EXTRA ??= ""
 

@@ -26,6 +26,8 @@ def do_sca_conv_rats(d):
 
     _suppress = get_suppress_entries(d)
 
+    _findings = []
+
     if os.path.exists(d.getVar("SCA_RAW_RESULT_FILE")):
         try:
             data = ElementTree.parse(d.getVar("SCA_RAW_RESULT_FILE")).getroot()
@@ -44,8 +46,6 @@ def do_sca_conv_rats(d):
                     
                     if not _severity in sca_allowed_warning_level(d):
                         continue
-                    if _id in _suppress:
-                        continue
                     for _i in node.iter(tag="file"):
                         _filename = ""
                         for _j in _i.iter(tag="name"):
@@ -60,12 +60,15 @@ def do_sca_conv_rats(d):
                                                     Message=_msg,
                                                     ID=_id,
                                                     Severity=_severity)
-                            sca_add_model_class(d, g)
+                            if g.GetFormattedID() in _suppress:
+                                continue
+                            _findings.append(g)
                 except Exception as exp:
                     bb.warn(str(exp))
         except:
             pass
 
+    sca_add_model_class_list(d, _findings)
     return sca_save_model_to_string(d)
 
 python do_sca_rats() {
@@ -110,7 +113,7 @@ python do_sca_rats() {
             cmd_output = e.stdout or ""
         xml_output = xml_combine(d, xml_output, cmd_output)
 
-    _files = get_files_by_extention_or_shebang(d, d.getVar("SCA_SOURCES_DIR"), ".*python", ".py", _excludes)
+    _files = get_files_by_extention_or_shebang(d, d.getVar("SCA_SOURCES_DIR"), d.getVar("SCA_PYTHON_SHEBANG"), ".py", _excludes)
     ## Python
     if any(_files):
         try:

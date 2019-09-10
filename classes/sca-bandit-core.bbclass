@@ -23,6 +23,9 @@ def do_sca_conv_bandit(d):
         "HIGH": "error"
     }
 
+    _findings = []
+    _suppress = get_suppress_entries(d)
+
     if os.path.exists(d.getVar("SCA_RAW_RESULT_FILE")):
         with open(d.getVar("SCA_RAW_RESULT_FILE")) as f:
             try:
@@ -46,11 +49,15 @@ def do_sca_conv_bandit(d):
                                                     Message=item["issue_text"],
                                                     ID=item["test_id"],
                                                     Severity=severity_map[item["issue_severity"]])
+                            if g.GetFormattedID() in _suppress:
+                                continue
+                            if not sca_is_in_finding_scope(d, "bandit", g.GetFormattedID()):
+                                continue
                             if g.Severity in sca_allowed_warning_level(d):
-                                sca_add_model_class(d, g)
+                                _findings.append(g)
                         except Exception as exp:
                             bb.warn(str(exp))
-
+    sca_add_model_class_list(d, _findings)
     return sca_save_model_to_string(d)
 
 python do_sca_bandit_core() {
@@ -63,17 +70,14 @@ python do_sca_bandit_core() {
     d.setVar("SCA_SUPRESS_FILE", os.path.join(d.getVar("STAGING_DATADIR_NATIVE"), "bandit-{}-suppress".format(d.getVar("SCA_MODE"))))
     d.setVar("SCA_FATAL_FILE", os.path.join(d.getVar("STAGING_DATADIR_NATIVE"), "bandit-{}-fatal".format(d.getVar("SCA_MODE"))))
 
-    _suppress = get_suppress_entries(d)
-
+    
     result_raw_file = os.path.join(d.getVar("T"), "sca_raw_bandit.json")
     d.setVar("SCA_RAW_RESULT_FILE", result_raw_file)
 
     _args = ["bandit"]
     _args += ["-f", "json"]
     _args += ["-o", result_raw_file]
-    if any(_suppress):
-        _args += ["--skip", ",".join(_suppress)]
-    _files = get_files_by_extention_or_shebang(d, d.getVar("SCA_SOURCES_DIR"), ".*python3", ".py",
+    _files = get_files_by_extention_or_shebang(d, d.getVar("SCA_SOURCES_DIR"), d.getVar("SCA_PYTHON_SHEBANG"), ".py",
                                 sca_filter_files(d, d.getVar("SCA_SOURCES_DIR"), clean_split(d, "SCA_FILE_FILTER_EXTRA")))
 
     with open(d.getVar("SCA_RAW_RESULT_FILE"), "w") as o:

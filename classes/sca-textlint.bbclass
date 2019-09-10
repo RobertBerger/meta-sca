@@ -60,6 +60,7 @@ def do_sca_conv_textlint(d):
 
     _suppress = get_suppress_entries(d)
     _excludes = sca_filter_files(d, d.getVar("SCA_SOURCES_DIR"), clean_split(d, "SCA_FILE_FILTER_EXTRA"))
+    _findings = []
 
     if os.path.exists(d.getVar("SCA_RAW_RESULT_FILE")):
         jobj = []
@@ -84,13 +85,16 @@ def do_sca_conv_textlint(d):
                                             Severity=severity_map[str(msg["severity"])])
                     if g.File in _excludes:
                         continue
-                    if g.GetPlainID() in _suppress:
+                    if g.GetFormattedID() in _suppress:
+                        continue
+                    if not sca_is_in_finding_scope(d, "textlint", g.GetFormattedID()):
                         continue
                     if g.Severity in sca_allowed_warning_level(d):
-                        sca_add_model_class(d, g)
+                        _findings.append(g)
                 except Exception as exp:
                     bb.warn(str(exp))
     
+    sca_add_model_class_list(d, _findings)
     return sca_save_model_to_string(d)
 
 python do_sca_textlint() {
@@ -128,13 +132,15 @@ python do_sca_textlint() {
     _args += ["--debug"]
     _args += ["-f", "json"]
     _args += ["-o", result_raw_file]
-    _args += [d.getVar("SCA_SOURCES_DIR")]
+    _files = get_files_by_extention(d, d.getVar("SCA_SOURCES_DIR"), "",
+                                sca_filter_files(d, d.getVar("SCA_SOURCES_DIR"), clean_split(d, "SCA_FILE_FILTER_EXTRA")))
 
     cmd_output = ""
-    try:
-        cmd_output += subprocess.check_output(_args, universal_newlines=True, stderr=subprocess.STDOUT, timeout=300)
-    except subprocess.CalledProcessError as e:
-        cmd_output += e.stdout or ""
+    if any(_files):
+        try:
+            cmd_output += subprocess.check_output(_args + _files, universal_newlines=True, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as e:
+            cmd_output += e.stdout or ""
         
     ## Create data model
     d.setVar("SCA_DATAMODEL_STORAGE", "{}/textlint.dm".format(d.getVar("T")))

@@ -23,7 +23,8 @@ def do_sca_conv_proselint(d):
     items = []
     pattern = r"^(?P<file>.*):(?P<line>\d+):(?P<column>\d+):\s+(?P<severity>\w+):\s+(?P<message>.*)\s\[-(?P<id>.*)\]"
 
-    __suppress = get_suppress_entries(d)
+    _suppress = get_suppress_entries(d)
+    _findings = []
 
     if os.path.exists(d.getVar("SCA_RAW_RESULT_FILE")):
         jobj = {}
@@ -46,13 +47,16 @@ def do_sca_conv_proselint(d):
                                                 Message=item["message"],
                                                 ID=item["check"],
                                                 Severity=item["severity"])
-                        if g.GetPlainID() in __suppress:
+                        if g.GetFormattedID() in _suppress:
+                            continue
+                        if not sca_is_in_finding_scope(d, "proselint", g.GetFormattedID()):
                             continue
                         if g.Severity in sca_allowed_warning_level(d):
-                            sca_add_model_class(d, g)
+                            _findings.append(g)
                     except Exception as exp:
                         bb.warn(str(exp))
 
+    sca_add_model_class_list(d, _findings)
     return sca_save_model_to_string(d)
 
 python do_sca_proselint_core() {

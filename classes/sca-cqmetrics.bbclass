@@ -1,5 +1,7 @@
 ## File extension filter list (whitespace separated)
 SCA_CQMETRICS_FILE_FILTER ?= ".c .cpp .h .hpp"
+SCA_CQMETRICS_EXTRA_SUPPRESS ?= ""
+SCA_CQMETRICS_EXTRA_FATAL ?= ""
 
 SCA_CQMETRICS_ERROR_cyclomatic_max_gt ?= "30.0"
 SCA_CQMETRICS_WARN_cyclomatic_max_gt ?= "15.0"
@@ -130,7 +132,7 @@ def do_sca_conv_cqmetrics(d):
     buildpath = d.getVar("SCA_SOURCES_DIR")
 
     _suppress = get_suppress_entries(d)
-
+    _findings = []
     if os.path.exists(d.getVar("SCA_RAW_RESULT_FILE")):
         j = {}
         with open(d.getVar("SCA_RAW_RESULT_FILE")) as i:
@@ -150,10 +152,12 @@ def do_sca_conv_cqmetrics(d):
                                                     Message="value {} is {}<{}".format(ik, v, val),
                                                     ID=ik,
                                                     Severity="error")
-                            if ik in _suppress:
+                            if g.GetFormattedID() in _suppress:
+                                continue
+                            if not sca_is_in_finding_scope(d, "cqmetrics", g.GetFormattedID()):
                                 continue
                             if g.Severity in sca_allowed_warning_level(d):
-                                sca_add_model_class(d, g)
+                                _findings.append(g)
                     elif d.getVar("SCA_CQMETRICS_ERROR_{}_gt".format(ik)):
                         val = float(d.getVar("SCA_CQMETRICS_ERROR_{}_gt".format(ik)))
                         if v > val:
@@ -165,10 +169,12 @@ def do_sca_conv_cqmetrics(d):
                                                     Message="value {} is {}>{}".format(ik, v, val),
                                                     ID=ik,
                                                     Severity="error")
-                            if ik in _suppress:
+                            if g.GetFormattedID() in _suppress:
+                                continue
+                            if not sca_is_in_finding_scope(d, "cqmetrics", g.GetFormattedID()):
                                 continue
                             if g.Severity in sca_allowed_warning_level(d):
-                                sca_add_model_class(d, g)
+                                _findings.append(g)
                     elif d.getVar("SCA_CQMETRICS_WARN_{}_lt".format(ik)):
                         val = float(d.getVar("SCA_CQMETRICS_WARN_{}_lt".format(ik)))
                         if v < val:
@@ -180,10 +186,12 @@ def do_sca_conv_cqmetrics(d):
                                                     Message="value {} is {}<{}".format(ik, v, val),
                                                     ID=ik,
                                                     Severity="warning")
-                            if ik in _suppress:
+                            if g.GetFormattedID() in _suppress:
+                                continue
+                            if not sca_is_in_finding_scope(d, "cqmetrics", g.GetFormattedID()):
                                 continue
                             if g.Severity in sca_allowed_warning_level(d):
-                                sca_add_model_class(d, g)
+                                _findings.append(g)
                     elif d.getVar("SCA_CQMETRICS_WARN_{}_gt".format(ik)):
                         val = float(d.getVar("SCA_CQMETRICS_WARN_{}_gt".format(ik)))
                         if v > val:
@@ -195,13 +203,16 @@ def do_sca_conv_cqmetrics(d):
                                                     Message="value {} is {}>{}".format(ik, v, val),
                                                     ID=ik,
                                                     Severity="warning")
-                            if ik in _suppress:
+                            if g.GetFormattedID() in _suppress:
+                                continue
+                            if not sca_is_in_finding_scope(d, "cqmetrics", g.GetFormattedID()):
                                 continue
                             if g.Severity in sca_allowed_warning_level(d):
-                                sca_add_model_class(d, g)
+                                _findings.append(g)
         except Exception as e:
             bb.note(str(e))
 
+    sca_add_model_class_list(d, _findings)
     return sca_save_model_to_string(d)
 
 python do_sca_cqmetrics() {

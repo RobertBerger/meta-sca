@@ -20,6 +20,7 @@ def do_sca_conv_standard(d):
     pattern = r"^(?P<file>.*):(?P<line>\d+):(?P<col>\d+):\s+(?P<msg>.*)\s+\((?P<id>.*)\)"
 
     _suppress = get_suppress_entries(d)
+    _findings = []
 
     if os.path.exists(d.getVar("SCA_RAW_RESULT_FILE")):
         with open(d.getVar("SCA_RAW_RESULT_FILE"), "r") as f:
@@ -35,13 +36,16 @@ def do_sca_conv_standard(d):
                                             Message=m.group("msg"),
                                             ID=m.group("id"),
                                             Severity="warning")
-                    if g.GetPlainID() in _suppress:
+                    if g.GetFormattedID() in _suppress:
+                        continue
+                    if not sca_is_in_finding_scope(d, "standard", g.GetFormattedID()):
                         continue
                     if g.Severity in sca_allowed_warning_level(d):
-                        sca_add_model_class(d, g)
+                        _findings.append(g)
                 except Exception as exp:
                     bb.warn(str(exp))
 
+    sca_add_model_class_list(d, _findings)
     return sca_save_model_to_string(d)
 
 python do_sca_standard_core() {

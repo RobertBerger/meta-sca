@@ -3,9 +3,10 @@
 inherit sca-global
 inherit sca-helper
 inherit sca-file-filter
-inherit sca-blackllist
+inherit sca-blacklist
 
 SCA_ENABLED_MODULES_RECIPE ?= "\
+                            alexkohler \
                             ansiblelint \
                             bandit \
                             bashate \
@@ -17,16 +18,25 @@ SCA_ENABLED_MODULES_RECIPE ?= "\
                             cqmetrics \
                             cspell \
                             cvecheck \
+                            darglint \
                             dennis \
                             detectsecrets \
                             eslint \
+                            flake8 \
                             flint \
                             gcc \
+                            golint \
+                            gosec \
+                            govet \
                             htmlhint \
+                            ikos \
                             jsonlint \
                             kconfighard \
+                            npmaudit \
+                            mypy \
                             oclint \
                             oelint \
+                            phan \
                             proselint \
                             pyfindinjection \
                             pylint \
@@ -34,14 +44,21 @@ SCA_ENABLED_MODULES_RECIPE ?= "\
                             pytype \
                             radon \
                             rats \
+                            retire \
+                            revive \
                             ropgadget \
+                            safety \
                             score \
                             shellcheck \
+                            sparse \
+                            splint \
                             standard \
+                            stank \
                             stylelint \
                             textlint \
                             tlv \
                             tscancode \
+                            vulture \
                             xmllint \
                             yamllint \
                             zrd \
@@ -63,7 +80,7 @@ def sca_on_recipe_init(d):
             BBHandler.inherit("sca-{}".format(item), "sca-on-recipe", 1, d)
             func = "sca-{}-init".format(item).replace("-", "_")
             if d.getVar(func, False) is not None:
-                bb.build.exec_func(func, d, pythonexception=True)
+                bb.build.exec_func(func, d, **get_bb_exec_ext_parameter_support(d))
             okay = True
         except bb.parse.ParseError:
             pass
@@ -72,7 +89,7 @@ def sca_on_recipe_init(d):
             BBHandler.inherit("sca-{}-recipe".format(item), "sca-on-recipe", 1, d)
             func = "sca-{}-init".format(item).replace("-", "_")
             if d.getVar(func, False) is not None:
-                bb.build.exec_func(func, d, pythonexception=True)
+                bb.build.exec_func(func, d, **get_bb_exec_ext_parameter_support(d))
             okay = True
         except bb.parse.ParseError:
             pass
@@ -82,6 +99,7 @@ def sca_on_recipe_init(d):
         BBHandler.inherit("sca-{}-recipe".format("bestof"), "sca-on-recipe", 1, d)
         func = "sca-{}-init".format("bestof").replace("-", "_")
         if d.getVar(func, False) is not None:
-            bb.build.exec_func(func, d, pythonexception=True)
+            bb.build.exec_func(func, d, **get_bb_exec_ext_parameter_support(d))
     if any(enabledModules):
-        bb.note("Using SCA Module(s) {}".format(",".join(sorted(enabledModules))))
+        if d.getVar("SCA_VERBOSE_OUTPUT") == "1":
+            bb.note("Using SCA Module(s) {}".format(",".join(sorted(enabledModules))))

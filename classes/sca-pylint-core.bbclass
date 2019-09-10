@@ -21,6 +21,9 @@ def do_sca_conv_pylint(d):
         "C" : "info"
     }
 
+    _findings = []
+    _suppress = get_suppress_entries(d)
+
     if os.path.exists(d.getVar("SCA_RAW_RESULT_FILE")):
         with open(d.getVar("SCA_RAW_RESULT_FILE"), "r") as f:
             for m in re.finditer(pattern, f.read(), re.MULTILINE):
@@ -32,13 +35,18 @@ def do_sca_conv_pylint(d):
                                             File=m.group("file"),
                                             Line=m.group("line"),
                                             Message=m.group("message"),
-                                            ID=m.group("raw_severity_id"),
+                                            ID="{}{}".format(m.group("raw_severity"), m.group("raw_severity_id")),
                                             Severity=severity_map[m.group("raw_severity")[0]])
+                    if g.GetFormattedID() in _suppress:
+                        continue
+                    if not sca_is_in_finding_scope(d, "pylint", g.GetFormattedID()):
+                        continue
                     if g.Severity in sca_allowed_warning_level(d):
-                        sca_add_model_class(d, g)
+                        _findings.append(g)
                 except Exception as exp:
                     bb.warn(str(exp))
 
+    sca_add_model_class_list(d, _findings)
     return sca_save_model_to_string(d)
 
 python do_sca_pylint_core() {
@@ -49,15 +57,10 @@ python do_sca_pylint_core() {
     d.setVar("SCA_SUPRESS_FILE", os.path.join(d.getVar("STAGING_DATADIR_NATIVE", True), "pylint-{}-suppress".format(d.getVar("SCA_MODE"))))
     d.setVar("SCA_FATAL_FILE", os.path.join(d.getVar("STAGING_DATADIR_NATIVE", True), "pylint-{}-fatal".format(d.getVar("SCA_MODE"))))
 
-    _suppress = get_suppress_entries(d)
-
     _args = ["python3", "-m", "pylint"]
     _args += ["--output-format=parseable"]
     _args += ["--score=no"]
-    if any(_suppress):
-        _args += ["--disable={}".format(",".join(_suppress))]
     _args += ["--rcfile={}/pylint.rc".format(d.getVar("T"))]
-    _args += get_files_by_extention_or_shebang(d, d.getVar("SCA_SOURCES_DIR"), ".*python3", [".py"])
     if d.getVar("SCA_PYLINT_EXTRA"):
         _args += d.getVar("SCA_PYLINT_EXTRA").split(" ")
     _args += ["-j", d.getVar("BB_NUMBER_THREADS")]
@@ -69,17 +72,19 @@ python do_sca_pylint_core() {
     tmp_result = os.path.join(d.getVar("T", True), "sca_raw_pylint.txt")
     d.setVar("SCA_RAW_RESULT_FILE", tmp_result)
 
+    os.environ["STAGING_LIBDIR"] = d.getVar("STAGING_LIBDIR")
+
     ## Patch a pylint.rc-file with all the library paths
     with open(os.path.join(d.getVar("T"), "pylint.rc"), "w") as f:
         f.write("[MASTER]\n")
         f.write('init-hook="import sys;[sys.path.insert(0, a) for a in \'{}\'.split(\':\')]'.format(d.getVar("SCA_PYLINT_LIBATH")) + '"')
 
-    _files = get_files_by_extention_or_shebang(d, d.getVar("SCA_SOURCES_DIR"), ".*/python3", ".py",
+    _files = get_files_by_extention_or_shebang(d, d.getVar("SCA_SOURCES_DIR"), d.getVar("SCA_PYTHON_SHEBANG"), ".py",
                                                sca_filter_files(d, d.getVar("SCA_SOURCES_DIR"), clean_split(d, "SCA_FILE_FILTER_EXTRA")))
 
     if any(_files):
         try:
-            cmd_output = subprocess.check_output(_args, universal_newlines=True, stderr=subprocess.STDOUT)
+            cmd_output = subprocess.check_output(_args + _files, universal_newlines=True, stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError as e:
             cmd_output = e.stdout or ""
     with open(tmp_result, "w") as o:

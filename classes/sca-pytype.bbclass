@@ -18,6 +18,9 @@ def do_sca_conv_pytype(d):
     buildpath = d.getVar("SCA_SOURCES_DIR")
 
     pattern = r"^File\s+\"(?P<file>.*)\",\s+line\s+(?P<line>\d+),\s+in\s+(?P<name>[\w\<\>]+):\s+(?P<msg>.*)\s+\[(?P<id>.*)\]"
+    
+    _findings = []
+    _suppress = get_suppress_entries(d)
 
     if os.path.exists(d.getVar("SCA_RAW_RESULT_FILE")):
         with open(d.getVar("SCA_RAW_RESULT_FILE"), "r") as f:
@@ -31,11 +34,16 @@ def do_sca_conv_pytype(d):
                                             Message="{}:{}".format(m.group("name"), m.group("msg")),
                                             ID=m.group("id"),
                                             Severity="warning")
+                    if g.GetFormattedID() in _suppress:
+                        continue
+                    if not sca_is_in_finding_scope(d, "pytype", g.GetFormattedID()):
+                        continue
                     if g.Severity in sca_allowed_warning_level(d):
-                        sca_add_model_class(d, g)
+                        _findings.append(g)
                 except Exception as exp:
                     bb.warn(str(exp))
 
+    sca_add_model_class_list(d, _findings)
     return sca_save_model_to_string(d)
 
 python do_sca_pytype() {
@@ -45,8 +53,6 @@ python do_sca_pytype() {
     d.setVar("SCA_EXTRA_FATAL", d.getVar("SCA_PYTYPE_EXTRA_FATAL"))
     d.setVar("SCA_SUPRESS_FILE", os.path.join(d.getVar("STAGING_DATADIR_NATIVE", True), "pytype-{}-suppress".format(d.getVar("SCA_MODE"))))
     d.setVar("SCA_FATAL_FILE", os.path.join(d.getVar("STAGING_DATADIR_NATIVE", True), "pytype-{}-fatal".format(d.getVar("SCA_MODE"))))
-
-    _suppress = get_suppress_entries(d)
 
     tmp_result = os.path.join(d.getVar("T", True), "sca_raw_pytype.txt")
     d.setVar("SCA_RAW_RESULT_FILE", tmp_result)
@@ -61,16 +67,13 @@ python do_sca_pytype() {
     _args = ["pytype"]
     _args += ["--keep-going"]
     _args += ["-V", d.getVar("PYTHON_BASEVERSION")]
-    if any(_suppress):
-        _args += ["-d", ",".join(_suppress)]
     _args += ["-P", ":".join(_paths)]
     _args += ["-o", os.path.join(d.getVar("T"), "pytypeout")]
    
-    _files = get_files_by_extention_or_shebang(d, d.getVar("SCA_SOURCES_DIR"), ".*python", [".py"], \
+    _files = get_files_by_extention_or_shebang(d, d.getVar("SCA_SOURCES_DIR"), d.getVar("SCA_PYTHON_SHEBANG"), [".py"], \
                                                 sca_filter_files(d, d.getVar("SCA_SOURCES_DIR"), clean_split(d, "SCA_FILE_FILTER_EXTRA")))
     
-    if any(_files):
-        _files = _files[-10:-1]    
+    if any(_files): 
         try:
             cmd_output += subprocess.check_output(_args + _files, universal_newlines=True, stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError as e:

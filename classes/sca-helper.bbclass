@@ -1,7 +1,8 @@
 inherit sca-conv-to-export
 inherit sca-datamodel
+inherit sca-blacklist
 
-DEPENDS += "${SCA_STD_PYTHON_INTERPRETER}-python-magic-native"
+DEPENDS += "${@oe.utils.ifelse(sca_is_module_blacklisted(d, 'foo'), '', '${SCA_STD_PYTHON_INTERPRETER}-python-magic-native')}"
 
 inherit ${@oe.utils.ifelse(d.getVar('SCA_STD_PYTHON_INTERPRETER') == 'python3', 'python3-dir', 'python-dir')}
 
@@ -68,14 +69,25 @@ def _combine_x_entries(d, input_file, extra_key):
     res = [x.strip() for x in res if x]
     return res
 
+
+SCA_LOCAL_FILE_FILTER ?= "\
+                    ${RECIPE_SYSROOT} \
+                    ${RECIPE_SYSROOT_NATIVE} \
+                    ${T} \
+    "
+
+
 def get_files_by_shebang(d, path, pattern, excludes=[]):
     import os
     import re
     res = []
-    pattern = r"^'!\s+{}".format(pattern)
+    local_dirs = clean_split(d, "SCA_LOCAL_FILE_FILTER")
+    pattern = r"^#!\s*{}".format(pattern)
     for root, dirs, files in os.walk(path, topdown=True):
         for item in files:
             _filename = os.path.join(root, item)
+            if any([_filename.startswith(x) for x in local_dirs]):
+                continue
             if _filename in excludes:
                 continue
             try:
@@ -93,19 +105,25 @@ def get_files_by_mimetype(d, path, mime, excludes=[]):
     import os
     import sys
     sys.path.append(os.path.join(d.getVar("STAGING_DIR_NATIVE"), d.getVar("PYTHON_SITEPACKAGES_DIR")[1:]))
-    import magic
-    res = []
-    for root, dirs, files in os.walk(path, topdown=True):
-        for item in files:
-            _filename = os.path.join(root, item)
-            if _filename in excludes:
-                continue
-            try:
-                if magic.from_file(_filename, mime=True) in mime:
-                    res.append(_filename)
-            except:
-                pass
-    return [x for x in res if os.path.isfile(x)]
+    try:
+        import magic
+        local_dirs = clean_split(d, "SCA_LOCAL_FILE_FILTER")
+        res = []
+        for root, dirs, files in os.walk(path, topdown=True):
+            for item in files:
+                _filename = os.path.join(root, item)
+                if any([_filename.startswith(x) for x in local_dirs]):
+                    continue
+                if _filename in excludes:
+                    continue
+                try:
+                    if magic.from_file(_filename, mime=True) in mime:
+                        res.append(_filename)
+                except:
+                    pass
+        return [x for x in res if os.path.isfile(x)]
+    except ImportError:
+        return []
 
 def get_files_by_glob(d, pattern, excludes=[]):
     import os
@@ -123,13 +141,16 @@ def get_files_by_extention(d, path, pattern, excludes=[]):
     res = []
     if isinstance(pattern, str):
         pattern = pattern.split(" ")
+    local_dirs = clean_split(d, "SCA_LOCAL_FILE_FILTER")
     for root, dirs, files in os.walk(path, topdown=True):
         for item in files:
             _filepath = os.path.join(root, item)
+            if any([_filepath.startswith(x) for x in local_dirs]):
+                continue
             if _filepath in excludes:
                 continue
             _filename, _file_extension = os.path.splitext(_filepath)
-            if _file_extension in pattern:
+            if _file_extension in pattern and pattern:
                 res.append(_filepath)
     return [x for x in res if os.path.isfile(x)]
 
@@ -161,7 +182,7 @@ def get_fatal_from_result(d, fatal_ids):
     return list(set(res))
 
 def clean_split(d, _var):
-    return [x for x in d.getVar(_var).split(" ") if x]
+    return [x for x in (d.getVar(_var) or "").split(" ") if x]
 
 def sca_task_aftermath(d, tool, fatals=None):
     ## Write to final export
@@ -197,3 +218,17 @@ def sca_force_run(d):
     if "rm_work" in clean_split(d, "INHERIT") and status == "1":
         bb.warn("You inherited 'rm_work', so enabling SCA_FORCE_RUN could slow down your build significantly")
     return status
+
+def get_bb_exec_ext_parameter_support(d):
+    ## Since commit https://github.com/openembedded/bitbake/commit/cfeffb602dd5319f071cd6bcf84139ec77f2d170
+    ## The support for pythonexception=True was removed from bb.build.exec_func 
+    ## which this layer uses heavily
+    ## so we need to probe here for it
+    ## if we are able to pass it or not
+    import bb
+    import inspect
+    res = {}
+    x = inspect.getfullargspec(bb.build.exec_func)
+    if "pythonexception" in x.args:
+        res["pythonexception"] = True
+    return res
