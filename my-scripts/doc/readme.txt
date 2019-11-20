@@ -40,7 +40,7 @@ cd my-scripts
 
 6) apply patches
 
-cd meta-virtualization
+cd meta-sca
 
 git co 2019-09-10-sca-v1.16-warrior-2.7
 
